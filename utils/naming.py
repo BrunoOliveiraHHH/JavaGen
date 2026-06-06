@@ -1,8 +1,17 @@
 """Conversões de nomenclatura entre SQL (snake_case) e Java (camelCase/PascalCase).
 
-Funções puras, sem dependências externas.
+Funções puras, sem dependências externas. Acentos são removidos dos identificadores
+Java (o nome original da coluna/tabela é preservado nas anotações @Column/@Table).
 """
 import re
+import unicodedata
+
+
+def _strip_accents(text: str) -> str:
+    """Remove acentos: 'bônus' -> 'bonus', 'ação' -> 'acao'."""
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+    )
 
 # Prefixos comuns de tabela que removemos do nome da classe (tb_user -> User).
 _TABLE_PREFIXES = ("tb_", "tbl_", "tab_")
@@ -13,11 +22,11 @@ _FK_PREFIXES = ("id_", "fk_")
 
 
 def _clean(token: str) -> str:
-    """Remove aspas e schema-qualificação, normaliza para minúsculas."""
+    """Remove aspas, schema-qualificação e acentos do identificador."""
     token = token.strip().strip('"').strip("`").strip("[").strip("]")
     if "." in token:  # public.tabela -> tabela
         token = token.split(".")[-1]
-    return token
+    return _strip_accents(token)
 
 
 def snake_to_camel(snake: str) -> str:

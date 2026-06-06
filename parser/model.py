@@ -126,13 +126,30 @@ class Table:
 
     @property
     def supports_base_entity(self) -> bool:
-        """True quando há PK única do tipo Long (caso comum -> estende BaseEntity)."""
+        """Toda tabela gerada estende BaseEntity (surrogate id Long). Apenas as
+        tabelas de junção pura (N:N) não viram entidade."""
+        return not self.is_join_table
+
+    @property
+    def has_surrogate_id(self) -> bool:
+        """True quando a própria tabela já tem uma PK 'id' Long de incremento
+        (então o id do BaseEntity substitui a coluna e ela não é emitida)."""
         pk = self.pk_column
         return (
             not self.has_composite_pk
             and pk is not None
             and pk.java_type == "Long"
+            and pk.name.lower() == "id"
+            and not pk.is_foreign_key
         )
+
+    @property
+    def pk_unique_columns(self) -> list[str]:
+        """Colunas da PK original que viram UNIQUE quando usamos surrogate id
+        (PK composta, ou PK simples que não é o 'id' Long)."""
+        if self.is_join_table or self.has_surrogate_id or not self.primary_key:
+            return []
+        return list(self.primary_key)
 
     def column(self, name: str) -> Optional[Column]:
         for c in self.columns:

@@ -565,6 +565,16 @@ def _derive_relationships(table: Table) -> None:
         fk.relationship_field_name = _unique_name(derive_fk_field(fk.column), used)
 
 
+_CLEAN_ENUM_VALUE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def _is_clean_enum(values) -> bool:
+    """Só vira enum se TODOS os valores forem identificadores Java ASCII válidos.
+    Valores com acento/espaço (ex.: 'abjuração', 'simples corpo a corpo') ficam
+    como String — senão o @Enumerated(STRING) não casaria com o valor do banco."""
+    return bool(values) and all(_CLEAN_ENUM_VALUE.match(v) for v in values)
+
+
 def _assign_enum_names(table: Table) -> None:
     # Extrai enums também de CHECK de tabela (ex.: CONSTRAINT ... CHECK (col IN (...))).
     for chk in table.check_constraints:
@@ -575,7 +585,7 @@ def _assign_enum_names(table: Table) -> None:
             if vals:
                 col.enum_values = vals
     for col in table.columns:
-        if col.enum_values and not col.is_foreign_key:
+        if col.enum_values and not col.is_foreign_key and _is_clean_enum(col.enum_values):
             col.enum_type_name = table.class_name + to_pascal_case(col.name)
 
 

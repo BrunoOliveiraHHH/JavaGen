@@ -143,16 +143,16 @@ class MapperGenerator(BaseGenerator):
                     continue
                 tgt = f.m2m.target_entity
                 coll = _pascal(f.m2m.field_name)
-                col_var = f.m2m.field_name
-                elem = tgt[:1].lower() + tgt[1:]
+                # Nomes locais neutros (cada bloco tem escopo próprio em Java),
+                # evita colisão entre a variável da lista e a do elemento.
                 lines.append(f"if (dto.{f.name}() != null) {{")
-                lines.append(f"    List<{tgt}> {col_var} = new ArrayList<>();")
+                lines.append(f"    List<{tgt}> _list = new ArrayList<>();")
                 lines.append(f"    for (Long _id : dto.{f.name}()) {{")
-                lines.append(f"        {tgt} {elem} = new {tgt}();")
-                lines.append(f"        {elem}.setId(_id);")
-                lines.append(f"        {col_var}.add({elem});")
+                lines.append(f"        {tgt} _ref = new {tgt}();")
+                lines.append(f"        _ref.setId(_id);")
+                lines.append(f"        _list.add(_ref);")
                 lines.append("    }")
-                lines.append(f"    e.set{coll}({col_var});")
+                lines.append(f"    e.set{coll}(_list);")
                 lines.append("}")
             else:  # scalar / enum
                 setter = _pascal(f.column.java_field)

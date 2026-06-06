@@ -9,6 +9,8 @@ Destaques:
 """
 from __future__ import annotations
 
+import re
+
 from generator.base import BaseGenerator, GeneratedFile, emit_columns, java_field_type
 from parser.model import Column, Schema, Table
 
@@ -28,17 +30,11 @@ class EntityGenerator(BaseGenerator):
                              "lombok.NoArgsConstructor", "lombok.AllArgsConstructor"}
         body: list[str] = []
 
-        if uses_base:
-            imports.add(ctx.pkg("common") + ".BaseEntity")
-            imports.add("lombok.EqualsAndHashCode")
-
-        # Quando não há BaseEntity (PK composta etc.), emitimos a PK manualmente.
-        if not uses_base:
-            body.extend(self._render_standalone_id(table, imports))
+        # Toda entidade estende BaseEntity (id surrogate Long + auditoria).
+        imports.add(ctx.pkg("common") + ".BaseEntity")
+        imports.add("lombok.EqualsAndHashCode")
 
         for col in emit_columns(table, ctx, skip_audit=True):
-            if uses_base and col.is_pk:
-                continue
             if col.is_foreign_key and col.fk and self._by_name.get(col.fk.ref_table.lower()):
                 body.extend(self._render_relationship(col))
             else:
@@ -80,13 +76,6 @@ class EntityGenerator(BaseGenerator):
         return GeneratedFile(self.package(), table.class_name, content)
 
     # ------------------------------------------------------------------ #
-    def _render_standalone_id(self, table: Table, imports: set[str]) -> list[str]:
-        """Para tabelas sem BaseEntity: emite a(s) coluna(s) de PK com @Id."""
-        lines: list[str] = []
-        if table.has_composite_pk:
-            lines.append("    // TODO: PK composta — considere @EmbeddedId/@IdClass.")
-        return lines
-
     def _render_relationship(self, col: Column) -> list[str]:
         fk = col.fk
         optional = "true" if col.nullable else "false"
@@ -106,15 +95,12 @@ class EntityGenerator(BaseGenerator):
         java_type, _ = java_field_type(ctx, col)
         lines: list[str] = [""]
 
-        if col.is_pk:  # só ocorre em tabelas sem BaseEntity
-            lines.append("    @Id")
-            if col.is_auto_increment:
-                lines.append("    @GeneratedValue(strategy = GenerationType.IDENTITY)")
-
+        # Sem @Id aqui: a PK é sempre o id surrogate do BaseEntity. PKs originais
+        # (compostas/atípicas) viram colunas normais + UNIQUE no @Table.
         col_args = [f'name = "{col.name}"']
         if col.java_type == "String" and col.length:
             col_args.append(f"length = {col.length}")
-        if not col.nullable and not col.is_pk:
+        if not col.nullable:
             col_args.append("nullable = false")
         if col.unique:
             col_args.append("unique = true")
@@ -144,14 +130,26 @@ class EntityGenerator(BaseGenerator):
                 idx_parts.append(f'        @Index(name = "{idx.name}", columnList = "{cols}"{extra})')
             joined = ",\n".join(idx_parts)
             table_args.append("indexes = {\n" + joined + "\n    }")
+        # UNIQUE: constraints declaradas + a PK original (quando usamos surrogate id).
+        uc_groups = [g for g in table.unique_constraints if g]
+        if table.pk_unique_columns:
+            uc_groups.append(table.pk_unique_columns)
+        if uc_groups:
+            uc_parts = []
+            for g in uc_groups:
+                cols = ", ".join(f'"{c}"' for c in g)
+                uc_parts.append(f"        @UniqueConstraint(columnNames = {{{cols}}})")
+            table_args.append("uniqueConstraints = {\n" + ",\n".join(uc_parts) + "\n    }")
         anns.append(f'@Table({", ".join(table_args)})')
 
+        # @Check: normaliza para uma única linha (CHECK multi-linha quebraria a string Java).
         checks = [c.expression for c in table.check_constraints]
         checks += [col.check for col in table.columns if col.check]
+        checks = [re.sub(r"\s+", " ", c).strip() for c in checks if c]
         if checks:
             imports.add("org.hibernate.annotations.Check")
-            combined = " AND ".join(f"({c})" for c in checks if c)
-            combined = combined.replace('"', '\\"')
+            combined = " AND ".join(f"({c})" for c in checks)
+            combined = combined.replace("\\", "\\\\").replace('"', '\\"')
             anns.append(f'@Check(constraints = "{combined}")')
 
         # Soft delete: DELETE vira UPDATE e as consultas escondem os removidos.

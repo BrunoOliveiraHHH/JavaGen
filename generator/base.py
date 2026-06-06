@@ -108,7 +108,9 @@ def emit_columns(table: Table, ctx: GenContext, *, skip_audit: bool):
     """
     uses_base = table.supports_base_entity
     for col in table.columns:
-        if uses_base and col.is_pk:
+        # Só pulamos a coluna 'id' Long (substituída pelo id do BaseEntity).
+        # PKs compostas/atípicas continuam sendo emitidas (e viram UNIQUE).
+        if uses_base and table.has_surrogate_id and col.is_pk and col.name.lower() == "id":
             continue
         if uses_base and skip_audit and is_audit_column(col.name):
             continue
