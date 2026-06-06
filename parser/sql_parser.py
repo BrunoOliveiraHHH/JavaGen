@@ -602,6 +602,43 @@ def _infer_inverse(schema: Schema, by_name: dict) -> None:
 # --------------------------------------------------------------------------- #
 # Entrada pública
 # --------------------------------------------------------------------------- #
+_STMT_HEAD_RE = re.compile(r"\s*([A-Za-z]+)(?:\s+([A-Za-z]+))?")
+
+
+def _classify_statement(stmt: str) -> Optional[str]:
+    """Classifica um statement pelo(s) seu(s) keyword(s) inicial(is).
+
+    Devolve um rótulo legível (ex.: 'INSERT', 'ALTER TABLE', 'CREATE TABLE') ou
+    None se o fragmento estiver vazio.
+    """
+    m = _STMT_HEAD_RE.match(stmt)
+    if not m or not m.group(1):
+        return None
+    kw = m.group(1).upper()
+    second = (m.group(2) or "").upper()
+    if kw == "CREATE":
+        if second == "UNIQUE":            # CREATE UNIQUE INDEX
+            return "CREATE INDEX"
+        if second in ("TABLE", "INDEX"):
+            return f"CREATE {second}"
+        return f"CREATE {second}".strip()  # VIEW, SEQUENCE, etc.
+    if kw == "ALTER":
+        return f"ALTER {second}".strip() if second else "ALTER"
+    return kw  # INSERT, UPDATE, DELETE, SELECT, DROP, GRANT, SET, ...
+
+
+def _count_ignored(script: str) -> dict[str, int]:
+    """Conta os statements NÃO processados (tudo que não é CREATE TABLE/INDEX),
+    agrupados por tipo. Usa o mesmo tokenizador respeitando parênteses/aspas."""
+    ignored: dict[str, int] = {}
+    for stmt in split_top_level(strip_comments(script), ";"):
+        label = _classify_statement(stmt)
+        if label is None or label in ("CREATE TABLE", "CREATE INDEX"):
+            continue
+        ignored[label] = ignored.get(label, 0) + 1
+    return ignored
+
+
 def _is_complete(schema: Schema) -> bool:
     return bool(schema.tables) and all(t.columns for t in schema.tables)
 
@@ -626,5 +663,6 @@ def parse_sql(text: str, dialect: str = "postgres") -> Schema:
     if not schema.tables:
         raise SqlParseError("Nenhum CREATE TABLE encontrado no SQL informado.")
 
+    schema.ignored = _count_ignored(text)
     _finalize(schema)
     return schema

@@ -110,6 +110,16 @@ th { color: var(--accent); }
 .tag.pk { background: #7c3aed; }
 .tag.fk { background: #0ea5e9; }
 
+.ignored {
+    background: #422006;
+    border: 1px solid #a16207;
+    color: #fde68a;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+
 .toast {
     position: fixed;
     bottom: 24px;

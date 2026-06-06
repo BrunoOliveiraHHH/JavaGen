@@ -136,7 +136,7 @@ def preview():
             ],
             "indexes": [{"name": i.name, "cols": i.columns, "unique": i.unique} for i in t.indexes],
         })
-    return jsonify(ok=True, tables=tables)
+    return jsonify(ok=True, tables=tables, ignored=schema.ignored)
 
 
 @app.route("/generate", methods=["POST"])
@@ -178,6 +178,8 @@ def generate():
     resp.headers["X-Gen-Tables"] = str(len(schema.tables))
     resp.headers["X-Gen-Files"] = str(len(files))
     resp.headers["X-Gen-Filename"] = download_name
+    # Resumo dos comandos ignorados (ex.: "INSERT:3, ALTER TABLE:1") para o aviso na tela.
+    resp.headers["X-Gen-Ignored"] = ", ".join(f"{k}:{v}" for k, v in schema.ignored.items())
     return resp
 
 

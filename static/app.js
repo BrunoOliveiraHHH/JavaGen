@@ -34,9 +34,17 @@ async function analisar() {
         box.classList.add("hidden");
         return;
     }
-    body.innerHTML = data.tables.map(renderTabela).join("");
+    body.innerHTML = data.tables.map(renderTabela).join("") + renderIgnorados(data.ignored);
     box.classList.remove("hidden");
     box.scrollIntoView({ behavior: "smooth" });
+}
+
+function renderIgnorados(ignored) {
+    const itens = Object.entries(ignored || {});
+    if (!itens.length) return "";
+    const total = itens.reduce((s, [, n]) => s + n, 0);
+    const lista = itens.map(([k, n]) => `${k}: ${n}`).join(" · ");
+    return `<p class="ignored">⚠️ ${total} comando(s) ignorado(s) (apenas CREATE TABLE/INDEX são usados): ${lista}</p>`;
 }
 
 function renderTabela(t) {
@@ -63,6 +71,7 @@ async function gerar() {
     const nome = resp.headers.get("X-Gen-Filename") || "spring.zip";
     const tabelas = resp.headers.get("X-Gen-Tables") || "?";
     const arquivos = resp.headers.get("X-Gen-Files") || "?";
+    const ignorados = resp.headers.get("X-Gen-Ignored") || "";
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -71,7 +80,9 @@ async function gerar() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    toast(`Geração concluída! ${tabelas} tabela(s), ${arquivos} arquivo(s). Output limpo.`, "ok");
+    let msg = `Geração concluída! ${tabelas} tabela(s), ${arquivos} arquivo(s). Output limpo.`;
+    if (ignorados) msg += ` Ignorados: ${ignorados}.`;
+    toast(msg, "ok");
 }
 
 let toastTimer = null;
