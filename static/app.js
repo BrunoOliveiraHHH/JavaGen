@@ -34,7 +34,12 @@ async function analisar() {
         box.classList.add("hidden");
         return;
     }
-    body.innerHTML = data.tables.map(renderTabela).join("") + renderIgnorados(data.ignored);
+    let extra = "";
+    if (data.consolidated_alters > 0) {
+        extra += `<p class="consolidated">✅ ${data.consolidated_alters} ALTER TABLE consolidado(s) no CREATE TABLE.</p>`;
+    }
+    extra += renderIgnorados(data.ignored);
+    body.innerHTML = data.tables.map(renderTabela).join("") + extra;
     box.classList.remove("hidden");
     box.scrollIntoView({ behavior: "smooth" });
 }
@@ -80,7 +85,9 @@ async function gerar() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+    const consolidados = resp.headers.get("X-Gen-Consolidated") || "0";
     let msg = `Geração concluída! ${tabelas} tabela(s), ${arquivos} arquivo(s). Output limpo.`;
+    if (consolidados !== "0") msg += ` ${consolidados} ALTER consolidado(s).`;
     if (ignorados) msg += ` Ignorados: ${ignorados}.`;
     toast(msg, "ok");
 }

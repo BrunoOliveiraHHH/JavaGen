@@ -639,11 +639,89 @@ def _count_ignored(script: str) -> dict[str, int]:
     return ignored
 
 
+_ALTER_RE = re.compile(
+    r"\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?P<name>[\w\".`]+)\s+(?P<rest>.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _apply_alter_action(table: Table, action: str, dialect: str) -> bool:
+    """Aplica uma ação de ALTER TABLE (apenas ADD ...) na tabela. Retorna True se
+    consolidou algo. Cobre ADD [COLUMN], ADD [CONSTRAINT] FOREIGN KEY/PRIMARY KEY/
+    UNIQUE/CHECK. Outras ações (DROP, RENAME, ALTER COLUMN) são ignoradas."""
+    m = re.match(r"\s*ADD\s+(?P<rest>.+)$", action, re.IGNORECASE | re.DOTALL)
+    if not m:
+        return False
+    rest = m.group("rest").strip()
+    rest_col = re.sub(r"^COLUMN\s+", "", rest, flags=re.IGNORECASE)
+    up = rest.upper()
+
+    if _TABLE_FK_RE.match(rest):
+        mm = _TABLE_FK_RE.match(rest)
+        cols = _split_cols(mm.group("cols"))
+        refcols = _split_cols(mm.group("refcols"))
+        fk = ForeignKey(
+            column=cols[0] if cols else "",
+            ref_table=_unquote(mm.group("tbl")),
+            ref_column=refcols[0] if refcols else "id",
+            name=_unquote(mm.group("cname")) if mm.group("cname") else None,
+            columns=cols, ref_columns=refcols,
+        )
+        odm = _ON_DELETE_RE.search(rest)
+        oum = _ON_UPDATE_RE.search(rest)
+        if odm:
+            fk.on_delete = re.sub(r"\s+", " ", odm.group("a").upper())
+        if oum:
+            fk.on_update = re.sub(r"\s+", " ", oum.group("a").upper())
+        table.foreign_keys.append(fk)
+        return True
+    if _TABLE_PK_RE.match(rest):
+        table.primary_key = _split_cols(_TABLE_PK_RE.match(rest).group("cols"))
+        return True
+    if _TABLE_UNIQUE_RE.match(rest) and up.startswith(("UNIQUE", "CONSTRAINT")):
+        table.unique_constraints.append(_split_cols(_TABLE_UNIQUE_RE.match(rest).group("cols")))
+        return True
+    if _TABLE_CHECK_RE.match(rest) and "CHECK" in up.split("(")[0]:
+        cm = _TABLE_CHECK_RE.match(rest)
+        table.check_constraints.append(
+            CheckConstraint(name=_unquote(cm.group("cname")) if cm.group("cname") else None,
+                            expression=cm.group("expr").strip()))
+        return True
+
+    # Caso geral: ADD [COLUMN] <definição de coluna>.
+    col = _parse_column_regex(rest_col, dialect)
+    if col and table.column(col.name) is None:
+        table.columns.append(col)
+        return True
+    return False
+
+
+def _apply_alters(schema: Schema, script: str, dialect: str) -> int:
+    """Consolida ALTER TABLE nas tabelas correspondentes. Retorna quantos
+    statements ALTER TABLE tiveram pelo menos uma ação aplicada."""
+    by_name = schema.by_name()
+    count = 0
+    for stmt in split_top_level(strip_comments(script), ";"):
+        mm = _ALTER_RE.match(stmt)
+        if not mm:
+            continue
+        table = by_name.get(_unquote(mm.group("name")).lower())
+        if table is None:
+            continue
+        applied = False
+        for action in split_top_level(mm.group("rest"), ","):
+            if _apply_alter_action(table, action, dialect):
+                applied = True
+        if applied:
+            count += 1
+    return count
+
+
 def _is_complete(schema: Schema) -> bool:
     return bool(schema.tables) and all(t.columns for t in schema.tables)
 
 
-def parse_sql(text: str, dialect: str = "postgres") -> Schema:
+def parse_sql(text: str, dialect: str = "postgres", consolidate_alter: bool = False) -> Schema:
     if not text or not text.strip():
         raise SqlParseError("Nenhum SQL informado.")
 
@@ -664,5 +742,12 @@ def parse_sql(text: str, dialect: str = "postgres") -> Schema:
         raise SqlParseError("Nenhum CREATE TABLE encontrado no SQL informado.")
 
     schema.ignored = _count_ignored(text)
+
+    # Opção: consolidar ALTER TABLE dentro das tabelas antes de derivar relacionamentos.
+    if consolidate_alter:
+        schema.consolidated_alters = _apply_alters(schema, text, dialect)
+        if schema.consolidated_alters:
+            schema.ignored.pop("ALTER TABLE", None)
+
     _finalize(schema)
     return schema

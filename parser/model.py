@@ -147,6 +147,8 @@ class Schema:
     # Comandos SQL ignorados (não-DDL de tabela), agrupados por tipo -> quantidade.
     # Ex.: {"INSERT": 3, "UPDATE": 1, "ALTER TABLE": 2}
     ignored: dict[str, int] = field(default_factory=dict)
+    # Quantos ALTER TABLE foram consolidados dentro dos CREATE TABLE (quando a opção está ligada).
+    consolidated_alters: int = 0
 
     def by_name(self) -> dict[str, Table]:
         return {t.name.lower(): t for t in self.tables}

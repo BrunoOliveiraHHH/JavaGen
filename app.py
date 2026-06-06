@@ -112,7 +112,7 @@ def preview():
     sql = _read_sql(request)
     dialect = request.form.get("dialect", DEFAULT_DIALECT)
     try:
-        schema = parse_sql(sql, dialect)
+        schema = parse_sql(sql, dialect, consolidate_alter=_checkbox(request, "consolidate_alter"))
     except SqlParseError as e:
         return jsonify(ok=False, error=str(e)), 400
     except Exception as e:  # pragma: no cover - robustez
@@ -136,7 +136,8 @@ def preview():
             ],
             "indexes": [{"name": i.name, "cols": i.columns, "unique": i.unique} for i in t.indexes],
         })
-    return jsonify(ok=True, tables=tables, ignored=schema.ignored)
+    return jsonify(ok=True, tables=tables, ignored=schema.ignored,
+                   consolidated_alters=schema.consolidated_alters)
 
 
 @app.route("/generate", methods=["POST"])
@@ -151,7 +152,7 @@ def generate():
         return jsonify(ok=False, error=f"Pacote base inválido: {ctx.base_package}"), 400
 
     try:
-        schema = parse_sql(sql, ctx.dialect)
+        schema = parse_sql(sql, ctx.dialect, consolidate_alter=_checkbox(request, "consolidate_alter"))
     except SqlParseError as e:
         return jsonify(ok=False, error=f"SQL inválido: {e}"), 400
     except Exception as e:  # pragma: no cover
@@ -180,6 +181,7 @@ def generate():
     resp.headers["X-Gen-Filename"] = download_name
     # Resumo dos comandos ignorados (ex.: "INSERT:3, ALTER TABLE:1") para o aviso na tela.
     resp.headers["X-Gen-Ignored"] = ", ".join(f"{k}:{v}" for k, v in schema.ignored.items())
+    resp.headers["X-Gen-Consolidated"] = str(schema.consolidated_alters)
     return resp
 
 

@@ -112,6 +112,13 @@ São lidos:
 | `CREATE INDEX` / `UNIQUE INDEX` | `@Table(indexes = @Index(...))` |
 | Colunas de auditoria (`criado_em`, `atualizado_em`, ...) | herdadas de `BaseEntity` |
 
+> **DML e ALTER TABLE.** Apenas `CREATE TABLE` e `CREATE INDEX` são processados.
+> Comandos `INSERT/UPDATE/DELETE/SELECT` (e `ALTER` quando a opção está desligada)
+> são **ignorados** — e a quantidade/tipo deles é informada na tela (preview e aviso
+> de geração). Ligando **Consolidar ALTER TABLE**, os `ALTER TABLE ... ADD ...`
+> (colunas, `FOREIGN KEY`, `PRIMARY KEY`, `UNIQUE`, `CHECK`) são dobrados para dentro
+> da tabela correspondente antes da geração.
+
 ---
 
 ## Decisões de arquitetura do Java gerado
@@ -179,6 +186,7 @@ Flask; `utils/` é puro; `app.py` só orquestra o HTTP.
 | Anotações OpenAPI | `@Tag/@Operation/@Schema` (springdoc) | ligado |
 | Auditoria com usuário | `criadoPor/atualizadoPor` + `AuditorAware` | ligado |
 | Soft delete | `@SQLDelete` + `@SQLRestriction` + campo `deleted` | desligado |
+| Consolidar ALTER TABLE | dobra colunas/FKs/constraints de `ALTER TABLE` para dentro do `CREATE TABLE` | desligado |
 
 ---
 

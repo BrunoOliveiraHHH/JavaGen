@@ -119,6 +119,15 @@ th { color: var(--accent); }
     font-size: 0.85rem;
     margin-top: 8px;
 }
+.consolidated {
+    background: #052e16;
+    border: 1px solid #15803d;
+    color: #bbf7d0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
 
 .toast {
     position: fixed;
