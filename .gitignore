@@ -1,0 +1,9 @@
+_output/
+_validate/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+*.iml

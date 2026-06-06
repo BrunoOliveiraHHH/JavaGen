@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaGen — Gerador Spring Boot a partir de SQL</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+    <h1>JavaGen</h1>
+    <p class="sub">Gere classes Java/Spring Boot a partir de um <code>.sql</code> — entidades,
+        DTOs, services genéricos, filtros, specifications e mais.</p>
+</header>
+
+<main>
+    <form id="genForm" method="post" enctype="multipart/form-data">
+        <section class="card">
+            <h2>1. SQL de origem</h2>
+            <div class="row">
+                <button type="button" class="ghost" onclick="carregarExemplo()">Carregar SQL de exemplo</button>
+                <label class="file">
+                    <input type="file" name="sql_file" accept=".sql" onchange="nomeArquivo(this)">
+                    <span id="fileLabel">Ou enviar arquivo .sql…</span>
+                </label>
+            </div>
+            <textarea id="sqlText" name="sql_text" rows="14"
+                      placeholder="Cole aqui seus comandos CREATE TABLE..."></textarea>
+        </section>
+
+        <section class="card">
+            <h2>2. Configuração</h2>
+            <div class="grid">
+                <label>Nome do sistema
+                    <input type="text" name="system_name" value="{{ defaults.system_name }}"
+                           placeholder="Ex.: SISGEL">
+                </label>
+                <label>Pacote base
+                    <input type="text" name="base_package" value="{{ defaults.base_package }}"
+                           placeholder="com.sua.empresa.app" pattern="[a-z_][a-z0-9_.]*">
+                </label>
+                <label>Banco de origem
+                    <select name="dialect">
+                        {% for value, rotulo in dialects.items() %}
+                        <option value="{{ value }}" {% if value == defaults.dialect %}selected{% endif %}>{{ rotulo }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Base path da API
+                    <input type="text" name="rest_base_path" value="{{ defaults.rest_base_path }}"
+                           placeholder="/api">
+                </label>
+            </div>
+
+            <fieldset class="opts">
+                <legend>Opções de geração</legend>
+                <label class="chk"><input type="checkbox" name="use_lombok" checked> Usar Lombok</label>
+                <label class="chk"><input type="checkbox" name="gen_inverse_rel" checked> Relacionamento inverso (@OneToMany)</label>
+                <label class="chk"><input type="checkbox" name="gen_enums" checked> Enums de CHECK IN (...)</label>
+                <label class="chk"><input type="checkbox" name="gen_openapi" checked> Anotações OpenAPI/Swagger</label>
+                <label class="chk"><input type="checkbox" name="audit_user" checked> Auditoria com usuário (criadoPor/atualizadoPor)</label>
+                <label class="chk"><input type="checkbox" name="soft_delete"> Soft delete (exclusão lógica)</label>
+            </fieldset>
+        </section>
+
+        <section class="actions">
+            <button type="button" class="secondary" onclick="analisar()">Analisar SQL</button>
+            <button type="submit" class="primary">Gerar e baixar .zip</button>
+        </section>
+    </form>
+
+    <section id="preview" class="card hidden">
+        <h2>Tabelas detectadas</h2>
+        <div id="previewBody"></div>
+    </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<footer>
+    <small>JavaGen · helper local · roda em <code>127.0.0.1:5000</code></small>
+</footer>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
