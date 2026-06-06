@@ -19,7 +19,6 @@ from generator.base import GenContext, emit_columns
 from parser.model import Schema, Table
 
 _TEMPORAL = {"LocalDate", "LocalDateTime", "LocalTime", "OffsetDateTime", "OffsetTime"}
-_NUMERIC = {"Integer", "Long", "Short", "Double", "Float", "BigDecimal"}
 
 
 @dataclass
@@ -89,11 +88,11 @@ def build_filters(table: Table, schema: Schema, ctx: GenContext) -> list[FilterS
                 ],
                 predicate=f'GenericSpecification.between("{attr}", f.{attr}Inicio(), f.{attr}Fim())',
             ))
-        # --- Numérico / Boolean / outros -> EQUAL ---
+        # --- Numérico / Boolean / Duration / UUID / outros -> EQUAL ---
         else:
-            imp = col.java_import if jt in _NUMERIC else None
+            # Sempre usa o import do tipo da coluna (cobre Duration, UUID, BigDecimal...).
             specs.append(FilterSpec(
-                fields=[FilterField(attr, jt, imp)],
+                fields=[FilterField(attr, jt, col.java_import)],
                 predicate=f'GenericSpecification.equal("{attr}", f.{attr}())',
             ))
 
