@@ -521,17 +521,48 @@ def _finalize(schema: Schema) -> None:
     _infer_inverse(schema, by_name)
 
 
+def _member_names(table: Table) -> set[str]:
+    """Nomes de campos já em uso na entidade (colunas não-FK, FKs, coleções)."""
+    names: set[str] = set()
+    for col in table.columns:
+        if not col.is_foreign_key:
+            names.add(col.java_field)
+    for fk in table.foreign_keys:
+        if fk.relationship_field_name:
+            names.add(fk.relationship_field_name)
+    for o in table.one_to_many:
+        names.add(o.collection_field_name)
+    for m in table.many_to_many:
+        names.add(m.field_name)
+    return names
+
+
+def _unique_name(base: str, used: set[str], hint: str | None = None) -> str:
+    """Garante um nome único: tenta `base`; se colidir, tenta `base+Hint`; senão sufixa número."""
+    if base not in used:
+        used.add(base)
+        return base
+    if hint:
+        cand = base + hint[:1].upper() + hint[1:]
+        if cand not in used:
+            used.add(cand)
+            return cand
+    i = 2
+    while f"{base}{i}" in used:
+        i += 1
+    name = f"{base}{i}"
+    used.add(name)
+    return name
+
+
 def _derive_relationships(table: Table) -> None:
-    used: set[str] = set()
+    # Semente com os campos de colunas não-FK, para a FK não colidir com uma coluna.
+    used: set[str] = {c.java_field for c in table.columns if not c.is_foreign_key}
     for fk in table.foreign_keys:
         if not fk.column:
             continue
-        field = derive_fk_field(fk.column)
-        if field in used:  # colisão -> usa o nome completo da coluna
-            field = snake_to_camel(fk.column)
-        used.add(field)
-        fk.relationship_field_name = field
         fk.target_entity = class_name_for_table(fk.ref_table)
+        fk.relationship_field_name = _unique_name(derive_fk_field(fk.column), used)
 
 
 def _assign_enum_names(table: Table) -> None:
@@ -567,8 +598,9 @@ def _detect_many_to_many(schema: Schema, by_name: dict) -> None:
             continue
 
         t.is_join_table = True
-        a_field = pluralize(snake_to_camel(b.name))  # ex.: usuario.perfis
-        b_field = pluralize(snake_to_camel(a.name))  # ex.: perfil.usuarios
+        # Nomes únicos dentro de cada entidade (evita colisão com colunas/FK/coleções).
+        a_field = _unique_name(pluralize(snake_to_camel(b.name)), _member_names(a))
+        b_field = _unique_name(pluralize(snake_to_camel(a.name)), _member_names(b))
 
         # Lado dono = A (primeira FK), com @JoinTable.
         a.many_to_many.append(ManyToMany(
@@ -591,11 +623,15 @@ def _infer_inverse(schema: Schema, by_name: dict) -> None:
             parent = by_name.get(fk.ref_table.lower())
             if not parent or parent is child:
                 continue
+            mapped = fk.relationship_field_name or snake_to_camel(fk.column)
+            # Nome único; se a coleção colidir (ex.: 2 FKs do mesmo filho), desambigua
+            # pelo campo do lado filho (mapped_by). Ex.: batalhaNavaisBarcoDefensor.
+            coll = _unique_name(pluralize(snake_to_camel(child.name)), _member_names(parent), hint=mapped)
             parent.one_to_many.append(OneToMany(
                 child_table=child.name,
                 child_entity=child.class_name,
-                mapped_by=fk.relationship_field_name or snake_to_camel(fk.column),
-                collection_field_name=pluralize(snake_to_camel(child.name)),
+                mapped_by=mapped,
+                collection_field_name=coll,
             ))
 
 
